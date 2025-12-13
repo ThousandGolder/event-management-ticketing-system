@@ -1,0 +1,42 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Public paths that don't require authentication
+  const publicPaths = ["/login", "/register", "/forgot-password", "/"];
+  const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
+
+  // Check for auth token (simplified - in real app, use cookies or sessions)
+  const token = request.cookies.get("auth-token")?.value;
+  const isAuthenticated = !!token;
+
+  // If trying to access dashboard without auth, redirect to login
+  if (pathname.startsWith("/dashboard") && !isAuthenticated) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("from", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // If authenticated and trying to access login/register, redirect to dashboard
+  if (isAuthenticated && (pathname === "/login" || pathname === "/register")) {
+    return NextResponse.redirect(new URL("/dashboard/user", request.url));
+  }
+
+  return NextResponse.next();
+}
+
+// Configure which routes to run middleware on
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
+};
