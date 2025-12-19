@@ -1,29 +1,51 @@
+//frontend/src/app/(dashboard)/admin/events/page.tsx
+
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Calendar,
   MapPin,
-  Users,
   Edit,
   Trash2,
   Eye,
   Filter,
   Search,
-  MoreVertical,
   CheckCircle,
   XCircle,
   TrendingUp,
   Download,
   BarChart3,
   AlertCircle,
+  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { eventsAPI } from "@/lib/api/events";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-interface Event {
-  id: number;
+type EventStatus =
+  | "active"
+  | "pending"
+  | "completed"
+  | "cancelled"
+  | "suspended";
+
+interface EventItem {
+  eventId: string;
   title: string;
   date: string;
   time: string;
@@ -34,392 +56,506 @@ interface Event {
   ticketsSold: number;
   totalTickets: number;
   revenue: number;
-  status: "active" | "pending" | "completed" | "cancelled" | "suspended";
+  status: EventStatus;
   category: string;
+  description: string;
+  imageUrl?: string;
+  userId: string;
   createdAt: string;
-  lastUpdated: string;
+  updatedAt: string;
+}
+
+// Add this interface for statistics response
+interface StatisticsResponse {
+  success: boolean;
+  totalEvents?: number;
+  totalRevenue?: number;
+  totalTicketsSold?: number;
+  activeEvents?: number;
+  pendingEvents?: number;
+  error?: string;
 }
 
 export default function AdminEventsPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [selectedEvents, setSelectedEvents] = useState<number[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const eventsPerPage = 8;
-
-  const events: Event[] = [
-    {
-      id: 1,
-      title: "Music Festival 2024",
-      date: "Mar 15, 2024",
-      time: "6:00 PM",
-      location: "Addis Ababa Stadium",
-      city: "Addis Ababa",
-      organizer: "Ethiopian Arts Council",
-      organizerEmail: "arts@council.et",
-      ticketsSold: 1500,
-      totalTickets: 2000,
-      revenue: 750000,
-      status: "active",
-      category: "Music",
-      createdAt: "2024-01-15",
-      lastUpdated: "2024-03-01",
-    },
-    {
-      id: 2,
-      title: "Tech Conference & Expo",
-      date: "Mar 22, 2024",
-      time: "9:00 AM",
-      location: "Millennium Hall",
-      city: "Addis Ababa",
-      organizer: "Ethio Tech Hub",
-      organizerEmail: "info@ethiotech.et",
-      ticketsSold: 500,
-      totalTickets: 800,
-      revenue: 150000,
-      status: "active",
-      category: "Technology",
-      createdAt: "2024-01-20",
-      lastUpdated: "2024-02-28",
-    },
-    {
-      id: 3,
-      title: "Traditional Art Exhibition",
-      date: "Apr 5, 2024",
-      time: "10:00 AM",
-      location: "National Museum",
-      city: "Addis Ababa",
-      organizer: "Cultural Heritage Association",
-      organizerEmail: "heritage@culture.et",
-      ticketsSold: 300,
-      totalTickets: 400,
-      revenue: 60000,
-      status: "pending",
-      category: "Art & Culture",
-      createdAt: "2024-02-01",
-      lastUpdated: "2024-02-25",
-    },
-    {
-      id: 4,
-      title: "Food Festival & Cooking Show",
-      date: "Feb 28, 2024",
-      time: "11:00 AM",
-      location: "Meskel Square",
-      city: "Addis Ababa",
-      organizer: "Ethiopian Chefs Association",
-      organizerEmail: "chefs@association.et",
-      ticketsSold: 2000,
-      totalTickets: 2000,
-      revenue: 500000,
-      status: "completed",
-      category: "Food & Drink",
-      createdAt: "2024-01-10",
-      lastUpdated: "2024-02-28",
-    },
-    {
-      id: 5,
-      title: "Startup Pitch Competition",
-      date: "Apr 18, 2024",
-      time: "2:00 PM",
-      location: "Blue Moon Hotel",
-      city: "Adama",
-      organizer: "Startup Ethiopia",
-      organizerEmail: "pitch@startup.et",
-      ticketsSold: 200,
-      totalTickets: 300,
-      revenue: 40000,
-      status: "active",
-      category: "Business",
-      createdAt: "2024-02-15",
-      lastUpdated: "2024-03-05",
-    },
-    {
-      id: 6,
-      title: "Marathon for Charity",
-      date: "Apr 25, 2024",
-      time: "7:00 AM",
-      location: "Unity Park",
-      city: "Bahir Dar",
-      organizer: "Charity Run Ethiopia",
-      organizerEmail: "run@charity.et",
-      ticketsSold: 1000,
-      totalTickets: 1500,
-      revenue: 50000,
-      status: "pending",
-      category: "Sports",
-      createdAt: "2024-02-20",
-      lastUpdated: "2024-03-02",
-    },
-    {
-      id: 7,
-      title: "Jazz Night Concert",
-      date: "Mar 30, 2024",
-      time: "8:00 PM",
-      location: "Sheraton Hotel",
-      city: "Addis Ababa",
-      organizer: "Jazz Society",
-      organizerEmail: "jazz@society.et",
-      ticketsSold: 400,
-      totalTickets: 500,
-      revenue: 120000,
-      status: "cancelled",
-      category: "Music",
-      createdAt: "2024-01-25",
-      lastUpdated: "2024-02-20",
-    },
-    {
-      id: 8,
-      title: "Health & Wellness Expo",
-      date: "Apr 12, 2024",
-      time: "9:00 AM",
-      location: "Hilton Hotel",
-      city: "Addis Ababa",
-      organizer: "Health Ministry",
-      organizerEmail: "info@health.gov.et",
-      ticketsSold: 0,
-      totalTickets: 1000,
-      revenue: 0,
-      status: "suspended",
-      category: "Health & Wellness",
-      createdAt: "2024-02-10",
-      lastUpdated: "2024-03-01",
-    },
-    {
-      id: 9,
-      title: "Educational Seminar",
-      date: "Apr 20, 2024",
-      time: "10:00 AM",
-      location: "Addis Ababa University",
-      city: "Addis Ababa",
-      organizer: "Education Board",
-      organizerEmail: "seminar@education.et",
-      ticketsSold: 150,
-      totalTickets: 300,
-      revenue: 30000,
-      status: "active",
-      category: "Education",
-      createdAt: "2024-02-25",
-      lastUpdated: "2024-03-03",
-    },
-    {
-      id: 10,
-      title: "Film Festival",
-      date: "May 5, 2024",
-      time: "4:00 PM",
-      location: "City Cinema",
-      city: "Mekelle",
-      organizer: "Film Association",
-      organizerEmail: "film@association.et",
-      ticketsSold: 600,
-      totalTickets: 800,
-      revenue: 180000,
-      status: "active",
-      category: "Entertainment",
-      createdAt: "2024-02-28",
-      lastUpdated: "2024-03-04",
-    },
-  ];
-
-  const categories = [
-    "All Categories",
-    "Music",
-    "Technology",
-    "Art & Culture",
-    "Food & Drink",
-    "Business",
-    "Sports",
-    "Education",
-    "Health & Wellness",
-    "Entertainment",
-  ];
-
-  const filteredEvents = events.filter((event) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.organizer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.city.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus =
-      statusFilter === "all" || event.status === statusFilter;
-    const matchesCategory =
-      categoryFilter === "all" || event.category === categoryFilter;
-
-    return matchesSearch && matchesStatus && matchesCategory;
+  const { toast } = useToast();
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalEvents: 0,
+    totalRevenue: 0,
+    totalTicketsSold: 0,
+    activeEvents: 0,
+    pendingEvents: 0,
   });
 
-  // Calculate pagination
-  const indexOfLastEvent = currentPage * eventsPerPage;
-  const indexOfFirstEvent = indexOfLastEvent - eventsPerPage;
-  const currentEvents = filteredEvents.slice(
-    indexOfFirstEvent,
-    indexOfLastEvent
-  );
-  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | EventStatus>("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | string>("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const eventsPerPage = 6;
 
-  // Calculate statistics
-  const totalRevenue = filteredEvents.reduce(
-    (sum, event) => sum + event.revenue,
-    0
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | "bulk" | null>(
+    null
   );
-  const totalTicketsSold = filteredEvents.reduce(
-    (sum, event) => sum + event.ticketsSold,
-    0
-  );
-  const totalTicketsAvailable = filteredEvents.reduce(
-    (sum, event) => sum + event.totalTickets,
-    0
-  );
-  const activeEvents = filteredEvents.filter(
-    (event) => event.status === "active"
-  ).length;
-  const pendingEvents = filteredEvents.filter(
-    (event) => event.status === "pending"
-  ).length;
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const handleSelectEvent = (id: number) => {
-    setSelectedEvents((prev) =>
-      prev.includes(id)
-        ? prev.filter((eventId) => eventId !== id)
-        : [...prev, id]
+  useEffect(() => {
+    fetchEvents();
+    fetchStatistics();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      const response = await eventsAPI.getAll({
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        category: categoryFilter !== "all" ? categoryFilter : undefined,
+        search: searchQuery || undefined,
+      });
+
+      if (response.success) {
+        const eventsWithTime = response.events.map((event: any) => ({
+          ...event,
+          time: new Date(event.date).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          date: new Date(event.date).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
+          createdAt: new Date(event.createdAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
+        }));
+        setEvents(eventsWithTime);
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to fetch events",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch events",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fixed fetchStatistics function with proper type handling
+  const fetchStatistics = async () => {
+    try {
+      const response = (await eventsAPI.getStatistics()) as StatisticsResponse;
+      if (response.success) {
+        setStats({
+          totalEvents: response.totalEvents || 0,
+          totalRevenue: response.totalRevenue || 0,
+          totalTicketsSold: response.totalTicketsSold || 0,
+          activeEvents: response.activeEvents || 0,
+          pendingEvents: response.pendingEvents || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching statistics:", error);
+    }
+  };
+
+  const categories = useMemo(() => {
+    const set = new Set(events.map((e) => e.category));
+    return ["All Categories", ...Array.from(set)];
+  }, [events]);
+
+  const filtered = useMemo(() => {
+    return events.filter((ev) => {
+      const matchesSearch =
+        searchQuery.trim() === "" ||
+        ev.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ev.organizer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ev.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        ev.city.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus =
+        statusFilter === "all" || ev.status === statusFilter;
+      const matchesCategory =
+        categoryFilter === "all" || ev.category === categoryFilter;
+
+      return matchesSearch && matchesStatus && matchesCategory;
+    });
+  }, [events, searchQuery, statusFilter, categoryFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / eventsPerPage));
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(1);
+  }, [totalPages, currentPage]);
+
+  const indexOfLast = currentPage * eventsPerPage;
+  const indexOfFirst = indexOfLast - eventsPerPage;
+  const currentEvents = filtered.slice(indexOfFirst, indexOfLast);
+
+  useEffect(() => {
+    setSelectedIds((prev) =>
+      prev.filter((id) => events.some((e) => e.eventId === id))
+    );
+  }, [events]);
+
+  useEffect(
+    () => setCurrentPage(1),
+    [searchQuery, statusFilter, categoryFilter]
+  );
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  const handleSelectAll = () => {
-    if (selectedEvents.length === currentEvents.length) {
-      setSelectedEvents([]);
+  const selectAllOnPage = () => {
+    const onPageIds = currentEvents.map((e) => e.eventId);
+    const allSelected = onPageIds.every((id) => selectedIds.includes(id));
+    if (allSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !onPageIds.includes(id)));
     } else {
-      setSelectedEvents(currentEvents.map((event) => event.id));
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...onPageIds])));
     }
   };
 
-  const handleAction = (action: string, eventId: number) => {
-    switch (action) {
-      case "approve":
-        alert(`Approving event ${eventId}`);
-        break;
-      case "reject":
-        alert(`Rejecting event ${eventId}`);
-        break;
-      case "suspend":
-        alert(`Suspending event ${eventId}`);
-        break;
-      case "delete":
-        if (confirm("Are you sure you want to delete this event?")) {
-          alert(`Deleting event ${eventId}`);
-        }
-        break;
+  const updateEventStatus = async (id: string, status: EventStatus) => {
+    setActionLoading(true);
+    try {
+      const response = await eventsAPI.updateStatus(id, status);
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: `Event status updated to ${status}`,
+        });
+        fetchEvents();
+        fetchStatistics();
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to update status",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update status",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleBulkAction = (action: string) => {
-    if (selectedEvents.length === 0) {
-      alert("Please select events first");
+  const deleteEvent = async (id: string) => {
+    setActionLoading(true);
+    try {
+      const response = await eventsAPI.delete(id);
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: "Event deleted successfully",
+        });
+        fetchEvents();
+        fetchStatistics();
+        setSelectedIds((prev) => prev.filter((x) => x !== id));
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to delete event",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete event",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAction = async (
+    action: "approve" | "reject" | "suspend" | "delete",
+    id: string
+  ) => {
+    if (action === "delete") {
+      setDeleteTarget(id);
+      setConfirmDeleteOpen(true);
       return;
     }
-    alert(`Performing ${action} on ${selectedEvents.length} events`);
+    if (action === "approve") await updateEventStatus(id, "active");
+    if (action === "reject") await updateEventStatus(id, "cancelled");
+    if (action === "suspend") await updateEventStatus(id, "suspended");
   };
+
+  const handleBulkAction = async (action: "approve" | "suspend" | "delete") => {
+    if (selectedIds.length === 0) {
+      toast({
+        title: "No selection",
+        description: "Select events to perform bulk actions",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (action === "delete") {
+      setDeleteTarget("bulk");
+      setConfirmDeleteOpen(true);
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const status = action === "approve" ? "active" : "suspended";
+      const response = await eventsAPI.bulkUpdateStatus(selectedIds, status);
+
+      if (response.success) {
+        toast({
+          title: "Success",
+          description: `${selectedIds.length} events updated`,
+        });
+        fetchEvents();
+        fetchStatistics();
+        setSelectedIds([]);
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to update events",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update events",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    setActionLoading(true);
+    try {
+      if (deleteTarget === "bulk") {
+        const response = await eventsAPI.bulkDelete(selectedIds);
+        if (response.success) {
+          toast({
+            title: "Success",
+            description: `${selectedIds.length} events deleted`,
+          });
+          fetchEvents();
+          fetchStatistics();
+          setSelectedIds([]);
+        } else {
+          toast({
+            title: "Error",
+            description: response.error || "Failed to delete events",
+            variant: "destructive",
+          });
+        }
+      } else if (typeof deleteTarget === "string") {
+        await deleteEvent(deleteTarget);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+      setDeleteTarget(null);
+      setConfirmDeleteOpen(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteTarget(null);
+    setConfirmDeleteOpen(false);
+  };
+
+  const exportToCSV = () => {
+    if (filtered.length === 0) {
+      toast({
+        title: "No data",
+        description: "There are no events to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const csv = [
+      [
+        "ID",
+        "Title",
+        "Date",
+        "Status",
+        "Organizer",
+        "Tickets Sold",
+        "Total Tickets",
+        "Revenue",
+      ],
+      ...filtered.map((event) => [
+        event.eventId,
+        event.title,
+        event.date,
+        event.status,
+        event.organizer,
+        event.ticketsSold,
+        event.totalTickets,
+        event.revenue,
+      ]),
+    ]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `events_export_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export started",
+      description: "CSV exported successfully",
+    });
+  };
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      fetchEvents();
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [statusFilter, categoryFilter, searchQuery]);
+
+  const StatCard = ({
+    title,
+    value,
+    icon,
+  }: {
+    title: string;
+    value: string;
+    icon: React.ReactNode;
+  }) => (
+    <div className="bg-white rounded-xl shadow-sm p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        </div>
+        <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+
+  const FilterChip = ({
+    label,
+    onRemove,
+  }: {
+    label: string;
+    onRemove: () => void;
+  }) => (
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-800">
+      {label}
+      <button
+        onClick={onRemove}
+        className="ml-2 text-gray-500 hover:text-gray-700"
+      >
+        ×
+      </button>
+    </span>
+  );
+
+  if (loading && events.length === 0) {
+    return (
+      <div className="flex flex-col justify-center items-center min-h-[400px] space-y-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading events...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
             Event Management
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage all platform events, approve submissions, and track
+            Manage platform events — approve, suspend, delete and review
             performance
           </p>
         </div>
+
         <div className="flex flex-col sm:flex-row gap-3">
           <Link
-            href="/dashboard/admin/events/create"
+            href="/admin/events/create"
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center"
           >
             <Calendar className="h-5 w-5 mr-2" />
             Create Event
           </Link>
-          <button className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center">
+          <button
+            onClick={exportToCSV}
+            className="px-4 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center"
+          >
             <Download className="h-5 w-5 mr-2" />
             Export Data
           </button>
         </div>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Events</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {filteredEvents.length}
-              </p>
-            </div>
-            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Calendar className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Active Events</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {activeEvents}
-              </p>
-            </div>
-            <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Pending Review</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {pendingEvents}
-              </p>
-            </div>
-            <div className="h-10 w-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Tickets Sold</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {totalTicketsSold.toLocaleString()}
-              </p>
-            </div>
-            <div className="h-10 w-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                ETB {totalRevenue.toLocaleString()}
-              </p>
-            </div>
-            <div className="h-10 w-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <BarChart3 className="h-5 w-5 text-red-600" />
-            </div>
-          </div>
-        </div>
+        <StatCard
+          title="Total Events"
+          value={stats.totalEvents.toString()}
+          icon={<Calendar className="h-5 w-5 text-blue-600" />}
+        />
+        <StatCard
+          title="Active Events"
+          value={stats.activeEvents.toString()}
+          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
+        />
+        <StatCard
+          title="Pending"
+          value={stats.pendingEvents.toString()}
+          icon={<AlertCircle className="h-5 w-5 text-yellow-600" />}
+        />
+        <StatCard
+          title="Tickets Sold"
+          value={stats.totalTicketsSold.toLocaleString()}
+          icon={<TrendingUp className="h-5 w-5 text-purple-600" />}
+        />
+        <StatCard
+          title="Total Revenue"
+          value={`ETB ${stats.totalRevenue.toLocaleString()}`}
+          icon={<BarChart3 className="h-5 w-5 text-red-600" />}
+        />
       </div>
 
-      {/* Filters and Search */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="relative flex-1">
@@ -440,7 +576,7 @@ export default function AdminEventsPage() {
               <Filter className="h-5 w-5 text-gray-500" />
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[140px]"
               >
                 <option value="all">All Status</option>
@@ -454,117 +590,103 @@ export default function AdminEventsPage() {
 
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              onChange={(e) =>
+                setCategoryFilter(
+                  e.target.value === "all" ? "all" : e.target.value
+                )
+              }
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[160px]"
             >
-              {categories.map((category) => (
-                <option
-                  key={category}
-                  value={category === "All Categories" ? "all" : category}
-                >
-                  {category}
+              <option value="all">All Categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c === "All Categories" ? "all" : c}>
+                  {c}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Active Filters */}
         {(searchQuery ||
           statusFilter !== "all" ||
           categoryFilter !== "all") && (
-          <div className="mt-4 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-600">Active filters:</span>
-                {searchQuery && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-                    Search: "{searchQuery}"
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="ml-2 text-blue-600 hover:text-blue-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-                {statusFilter !== "all" && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-800">
-                    Status: {statusFilter}
-                    <button
-                      onClick={() => setStatusFilter("all")}
-                      className="ml-2 text-green-600 hover:text-green-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-                {categoryFilter !== "all" && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800">
-                    Category: {categoryFilter}
-                    <button
-                      onClick={() => setCategoryFilter("all")}
-                      className="ml-2 text-purple-600 hover:text-purple-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setStatusFilter("all");
-                  setCategoryFilter("all");
-                }}
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                Clear all
-              </button>
+          <div className="mt-4 pt-4 border-t flex items-center justify-between">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-gray-600">Active filters:</span>
+              {searchQuery && (
+                <FilterChip
+                  label={`Search: "${searchQuery}"`}
+                  onRemove={() => setSearchQuery("")}
+                />
+              )}
+              {statusFilter !== "all" && (
+                <FilterChip
+                  label={`Status: ${statusFilter}`}
+                  onRemove={() => setStatusFilter("all")}
+                />
+              )}
+              {categoryFilter !== "all" && (
+                <FilterChip
+                  label={`Category: ${categoryFilter}`}
+                  onRemove={() => setCategoryFilter("all")}
+                />
+              )}
             </div>
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("all");
+                setCategoryFilter("all");
+              }}
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              Clear all
+            </button>
           </div>
         )}
       </div>
 
-      {/* Bulk Actions */}
-      {selectedEvents.length > 0 && (
+      {selectedIds.length > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center space-x-3">
               <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
                 <span className="text-blue-600 font-semibold">
-                  {selectedEvents.length}
+                  {selectedIds.length}
                 </span>
               </div>
               <span className="text-blue-800 font-medium">
-                {selectedEvents.length} event
-                {selectedEvents.length > 1 ? "s" : ""} selected
+                {selectedIds.length} event{selectedIds.length > 1 ? "s" : ""}{" "}
+                selected
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleBulkAction("approve")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center"
+                disabled={actionLoading}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center disabled:opacity-50"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Approve Selected
               </button>
               <button
                 onClick={() => handleBulkAction("suspend")}
-                className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium flex items-center"
+                disabled={actionLoading}
+                className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 text-sm font-medium flex items-center disabled:opacity-50"
               >
                 <AlertCircle className="h-4 w-4 mr-2" />
                 Suspend Selected
               </button>
               <button
                 onClick={() => handleBulkAction("delete")}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center"
+                disabled={actionLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium flex items-center disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Selected
               </button>
               <button
-                onClick={() => setSelectedEvents([])}
+                onClick={() => setSelectedIds([])}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
               >
                 Clear Selection
@@ -574,7 +696,6 @@ export default function AdminEventsPage() {
         </div>
       )}
 
-      {/* Events Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -584,15 +705,17 @@ export default function AdminEventsPage() {
                   <input
                     type="checkbox"
                     checked={
-                      selectedEvents.length === currentEvents.length &&
-                      currentEvents.length > 0
+                      currentEvents.length > 0 &&
+                      currentEvents.every((e) =>
+                        selectedIds.includes(e.eventId)
+                      )
                     }
-                    onChange={handleSelectAll}
+                    onChange={selectAllOnPage}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
                 </th>
                 <th className="text-left py-4 px-6 text-sm font-medium text-gray-600">
-                  Event Details
+                  Event
                 </th>
                 <th className="text-left py-4 px-6 text-sm font-medium text-gray-600">
                   Date & Location
@@ -614,28 +737,30 @@ export default function AdminEventsPage() {
                 </th>
               </tr>
             </thead>
+
             <tbody>
               {currentEvents.map((event) => (
-                <tr key={event.id} className="border-b hover:bg-gray-50">
+                <tr key={event.eventId} className="border-b hover:bg-gray-50">
                   <td className="py-4 px-6">
                     <input
                       type="checkbox"
-                      checked={selectedEvents.includes(event.id)}
-                      onChange={() => handleSelectEvent(event.id)}
+                      checked={selectedIds.includes(event.eventId)}
+                      onChange={() => toggleSelect(event.eventId)}
                       className="h-4 w-4 text-blue-600 rounded"
                     />
                   </td>
                   <td className="py-4 px-6">
                     <div>
                       <p className="font-medium text-gray-900">{event.title}</p>
-                      <p className="text-sm text-gray-600">
-                        ID: #{event.id} • {event.category}
+                      <p className="text-sm text-gray-600 mt-1">
+                        ID: #{event.eventId.substring(0, 8)} • {event.category}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Created: {event.createdAt}
                       </p>
                     </div>
                   </td>
+
                   <td className="py-4 px-6">
                     <div className="space-y-1">
                       <div className="flex items-center text-sm">
@@ -660,6 +785,7 @@ export default function AdminEventsPage() {
                       </div>
                     </div>
                   </td>
+
                   <td className="py-4 px-6">
                     <div>
                       <p className="font-medium text-gray-900">
@@ -670,6 +796,7 @@ export default function AdminEventsPage() {
                       </p>
                     </div>
                   </td>
+
                   <td className="py-4 px-6">
                     <div>
                       <div className="flex justify-between text-sm mb-1">
@@ -704,6 +831,7 @@ export default function AdminEventsPage() {
                       </p>
                     </div>
                   </td>
+
                   <td className="py-4 px-6">
                     <div>
                       <p className="font-bold text-gray-900">
@@ -718,6 +846,7 @@ export default function AdminEventsPage() {
                       </p>
                     </div>
                   </td>
+
                   <td className="py-4 px-6">
                     <span
                       className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
@@ -736,46 +865,63 @@ export default function AdminEventsPage() {
                         event.status.slice(1)}
                     </span>
                   </td>
+
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-2">
                       <Link
-                        href={`/dashboard/admin/events/${event.id}`}
+                        href={`/admin/events/${event.eventId}`}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                        title="View Details"
+                        title="View"
                       >
                         <Eye className="h-4 w-4" />
                       </Link>
                       <Link
-                        href={`/dashboard/admin/events/${event.id}/edit`}
+                        href={`/admin/events/${event.eventId}/edit`}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
-                        title="Edit Event"
+                        title="Edit"
                       >
                         <Edit className="h-4 w-4" />
                       </Link>
+
                       {event.status === "pending" && (
                         <>
                           <button
-                            onClick={() => handleAction("approve", event.id)}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                            onClick={() =>
+                              handleAction("approve", event.eventId)
+                            }
+                            disabled={actionLoading}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50"
                             title="Approve"
                           >
                             <CheckCircle className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => handleAction("reject", event.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                            onClick={() =>
+                              handleAction("reject", event.eventId)
+                            }
+                            disabled={actionLoading}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
                             title="Reject"
                           >
                             <XCircle className="h-4 w-4" />
                           </button>
                         </>
                       )}
+
                       <button
-                        onClick={() => handleAction("delete", event.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                        onClick={() => handleAction("delete", event.eventId)}
+                        disabled={actionLoading}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        className="p-2 text-gray-500 hover:bg-gray-50 rounded-lg"
+                        title="More"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -785,8 +931,7 @@ export default function AdminEventsPage() {
           </table>
         </div>
 
-        {/* Empty State */}
-        {currentEvents.length === 0 && (
+        {currentEvents.length === 0 && !loading && (
           <div className="text-center py-12">
             <div className="h-16 w-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Calendar className="h-8 w-8 text-gray-400" />
@@ -810,17 +955,17 @@ export default function AdminEventsPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {filteredEvents.length > 0 && (
+        {filtered.length > 0 && (
           <div className="px-6 py-4 border-t flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="text-sm text-gray-600">
-              Showing {indexOfFirstEvent + 1} to{" "}
-              {Math.min(indexOfLastEvent, filteredEvents.length)} of{" "}
-              {filteredEvents.length} events
+              Showing {Math.min(indexOfFirst + 1, filtered.length)} to{" "}
+              {Math.min(indexOfLast, filtered.length)} of {filtered.length}{" "}
+              results
             </div>
+
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="p-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -829,16 +974,13 @@ export default function AdminEventsPage() {
 
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
+                if (totalPages <= 5) pageNum = i + 1;
+                else if (currentPage <= 3) pageNum = i + 1;
+                else if (currentPage >= totalPages - 2)
                   pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
+                else pageNum = currentPage - 2 + i;
 
+                if (pageNum < 1 || pageNum > totalPages) return null;
                 return (
                   <button
                     key={pageNum}
@@ -856,7 +998,7 @@ export default function AdminEventsPage() {
 
               <button
                 onClick={() =>
-                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
                 }
                 disabled={currentPage === totalPages}
                 className="p-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -867,6 +1009,35 @@ export default function AdminEventsPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget === "bulk"
+                ? "Delete selected events?"
+                : "Delete event?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget === "bulk"
+                ? `This will permanently delete ${selectedIds.length} selected events. This action cannot be undone.`
+                : `This will permanently delete the event. This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDelete} disabled={actionLoading}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={actionLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {actionLoading ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

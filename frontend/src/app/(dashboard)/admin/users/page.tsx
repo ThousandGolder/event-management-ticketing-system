@@ -1,3 +1,5 @@
+import { UserManagement } from "@/components/admin/UserManagement";
+
 export default function AdminUsersPage() {
   return (
     <div>
@@ -6,8 +8,9 @@ export default function AdminUsersPage() {
       </h1>
       <p className="text-gray-600 mb-6">View and manage all platform users</p>
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <p className="text-gray-600">Users management content coming soon...</p>
+  
       </div>
     </div>
   );
 }
+

@@ -1,30 +1,38 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { ProtectedRoute } from "../../../components/providers/ProtectedRoute";
+
 export default function AdminDashboardLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="space-y-6">
-      {/* Admin-specific header */}
-      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-2xl p-6 text-white">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold mb-2">
-              Administrator Dashboard
-            </h1>
-            <p className="opacity-90">
-              Manage users, events, and platform analytics
-            </p>
-          </div>
-          <div className="hidden lg:block">
-            <div className="h-16 w-16 bg-white/20 rounded-full flex items-center justify-center">
+    <ProtectedRoute requiredRole="admin">
+      <section className="space-y-6">
+        {/* Admin Header */}
+        <div className="rounded-2xl bg-gradient-to-r from-red-600 to-green-700 p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold lg:text-3xl">
+                Administrator Dashboard
+              </h1>
+              <p className="mt-1 opacity-90">
+                Manage users, events, and platform analytics
+              </p>
+            </div>
+
+            {/* Icon */}
+            <div className="hidden lg:flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
               <span className="text-2xl">👑</span>
             </div>
           </div>
         </div>
-      </div>
 
-      {children}
-    </div>
+        {/* Page Content */}
+        <div>{children}</div>
+      </section>
+    </ProtectedRoute>
   );
 }

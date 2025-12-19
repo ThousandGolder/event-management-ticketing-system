@@ -23,6 +23,7 @@ import {
   BarChart as BarChartIcon,
   PieChart,
   Activity,
+  AlertCircle,
 } from "lucide-react";
 
 // Types
@@ -64,110 +65,53 @@ export default function AdminAnalyticsPage() {
   const { toast } = useToast();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d" | "1y">(
     "30d"
   );
   const [chartType, setChartType] = useState<"bar" | "line" | "area">("bar");
 
-  // Fetch analytics data
+  // Fetch analytics data from your backend
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with your actual API endpoint
-      // const response = await fetch(`http://localhost:3001/api/analytics?range=${timeRange}`);
-      // const result = await response.json();
+      setError(null);
 
-      // Mock data for demonstration
-      const mockData: AnalyticsData = {
-        overview: {
-          totalUsers: 1542,
-          totalEvents: 89,
-          ticketsSold: 12457,
-          totalRevenue: 4589200,
-          activeUsers: 892,
-          conversionRate: 12.5,
-        },
-        revenueTrend: [
-          { month: "Jan", revenue: 850000, tickets: 2100 },
-          { month: "Feb", revenue: 920000, tickets: 2300 },
-          { month: "Mar", revenue: 1100000, tickets: 2750 },
-          { month: "Apr", revenue: 980000, tickets: 2450 },
-          { month: "May", revenue: 1250000, tickets: 3125 },
-          { month: "Jun", revenue: 1380000, tickets: 3450 },
-        ],
-        eventStats: [
-          {
-            name: "Music Festival",
-            tickets: 4500,
-            revenue: 1350000,
-            capacity: 85,
+      // Fetch from your backend endpoint
+      const response = await fetch(
+        `http://localhost:3001/analytics?range=${timeRange}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
           },
-          {
-            name: "Tech Conference",
-            tickets: 3200,
-            revenue: 960000,
-            capacity: 92,
-          },
-          {
-            name: "Art Exhibition",
-            tickets: 1800,
-            revenue: 540000,
-            capacity: 78,
-          },
-          { name: "Food Fair", tickets: 2950, revenue: 590000, capacity: 95 },
-        ],
-        userGrowth: [
-          { month: "Jan", users: 1200, active: 650 },
-          { month: "Feb", users: 1250, active: 680 },
-          { month: "Mar", users: 1320, active: 710 },
-          { month: "Apr", users: 1400, active: 750 },
-          { month: "May", users: 1480, active: 820 },
-          { month: "Jun", users: 1542, active: 892 },
-        ],
-        topEvents: [
-          {
-            id: "1",
-            name: "Summer Music Festival",
-            ticketsSold: 4500,
-            revenue: 1350000,
-            status: "active",
-          },
-          {
-            id: "2",
-            name: "Tech Summit 2024",
-            ticketsSold: 3200,
-            revenue: 960000,
-            status: "active",
-          },
-          {
-            id: "3",
-            name: "Art & Culture Expo",
-            ticketsSold: 1800,
-            revenue: 540000,
-            status: "completed",
-          },
-          {
-            id: "4",
-            name: "Food & Wine Festival",
-            ticketsSold: 2950,
-            revenue: 590000,
-            status: "active",
-          },
-        ],
-      };
+        }
+      );
 
-      // Simulate API delay
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      setData(mockData);
+      const result = await response.json();
 
-      toast({
-        title: "Data loaded",
-        description: "Analytics data refreshed successfully",
-      });
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+
+      if (result.success) {
+        setData(result.data);
+        toast({
+          title: "Data loaded",
+          description: `Analytics for ${timeRange} period loaded successfully`,
+        });
+      } else {
+        throw new Error(result.error || "Failed to fetch analytics data");
+      }
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      setError(errorMessage);
+      setData(null);
+
       toast({
-        title: "Error",
-        description: "Failed to load analytics data",
+        title: "Error loading data",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -193,26 +137,122 @@ export default function AdminAnalyticsPage() {
   };
 
   const exportData = () => {
+    if (!data) return;
+
+    // Create CSV content
+    const csvContent = [
+      [
+        "Analytics Export",
+        new Date().toLocaleDateString(),
+        `Range: ${timeRange}`,
+      ],
+      [],
+      ["Overview"],
+      ["Metric", "Value"],
+      ["Total Users", data.overview.totalUsers],
+      ["Total Events", data.overview.totalEvents],
+      ["Tickets Sold", data.overview.ticketsSold],
+      ["Total Revenue", `$${data.overview.totalRevenue}`],
+      ["Active Users", data.overview.activeUsers],
+      ["Conversion Rate", `${data.overview.conversionRate}%`],
+      [],
+      ["Revenue Trend"],
+      ["Month", "Revenue", "Tickets"],
+      ...data.revenueTrend.map((item) => [
+        item.month,
+        `$${item.revenue}`,
+        item.tickets,
+      ]),
+      [],
+      ["Top Events"],
+      ["Event Name", "Tickets Sold", "Revenue", "Status"],
+      ...data.topEvents.map((event) => [
+        event.name,
+        event.ticketsSold,
+        `$${event.revenue}`,
+        event.status,
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    // Create download link
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analytics-${timeRange}-${
+      new Date().toISOString().split("T")[0]
+    }.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
     toast({
-      title: "Export started",
-      description: "Your analytics data is being prepared for download",
+      title: "Export completed",
+      description: "Analytics data downloaded as CSV",
     });
-    // TODO: Implement actual export functionality
   };
 
   if (loading && !data) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p>Loading analytics...</p>
+          <RefreshCw className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+          <h2 className="text-xl font-semibold">Loading Analytics</h2>
+          <p className="text-muted-foreground">Fetching data from backend...</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Time range: {timeRange}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-16 w-16 mx-auto mb-4 text-destructive" />
+          <h2 className="text-2xl font-bold mb-2">Failed to Load Analytics</h2>
+          <p className="text-muted-foreground mb-4">{error}</p>
+          <div className="space-y-3">
+            <p className="text-sm">Make sure:</p>
+            <ul className="text-sm text-muted-foreground text-left space-y-1">
+              <li>• Your backend server is running on port 3001</li>
+              <li>• The /analytics endpoint is properly configured</li>
+              <li>• DynamoDB tables (Events, Users) have data</li>
+            </ul>
+          </div>
+          <Button onClick={fetchAnalytics} className="mt-6">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">No Data Available</h2>
+          <p className="text-muted-foreground">
+            No analytics data could be loaded
+          </p>
+          <Button onClick={fetchAnalytics} className="mt-4">
+            Try Again
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header with controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -220,7 +260,7 @@ export default function AdminAnalyticsPage() {
             Analytics Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Real-time insights and performance metrics
+            Real-time insights from your database • {timeRange} period
           </p>
         </div>
 
@@ -248,12 +288,17 @@ export default function AdminAnalyticsPage() {
             <RefreshCw
               className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
             />
-            Refresh
+            {loading ? "Refreshing..." : "Refresh"}
           </Button>
 
-          <Button variant="outline" size="sm" onClick={exportData}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportData}
+            disabled={!data}
+          >
             <Download className="h-4 w-4 mr-2" />
-            Export
+            Export CSV
           </Button>
         </div>
       </div>
@@ -262,44 +307,38 @@ export default function AdminAnalyticsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           title="Total Revenue"
-          value={formatCurrency(data?.overview.totalRevenue || 0)}
+          value={formatCurrency(data.overview.totalRevenue)}
           icon={<DollarSign className="h-5 w-5" />}
-          change="+12.5%"
           loading={loading}
         />
         <StatCard
           title="Tickets Sold"
-          value={formatNumber(data?.overview.ticketsSold || 0)}
+          value={formatNumber(data.overview.ticketsSold)}
           icon={<Ticket className="h-5 w-5" />}
-          change="+8.3%"
           loading={loading}
         />
         <StatCard
           title="Total Events"
-          value={formatNumber(data?.overview.totalEvents || 0)}
+          value={formatNumber(data.overview.totalEvents)}
           icon={<Calendar className="h-5 w-5" />}
-          change="+5.2%"
           loading={loading}
         />
         <StatCard
           title="Total Users"
-          value={formatNumber(data?.overview.totalUsers || 0)}
+          value={formatNumber(data.overview.totalUsers)}
           icon={<Users className="h-5 w-5" />}
-          change="+4.1%"
           loading={loading}
         />
         <StatCard
           title="Active Users"
-          value={formatNumber(data?.overview.activeUsers || 0)}
+          value={formatNumber(data.overview.activeUsers)}
           icon={<UserCheck className="h-5 w-5" />}
-          change="+6.7%"
           loading={loading}
         />
         <StatCard
           title="Conversion Rate"
-          value={`${data?.overview.conversionRate.toFixed(1)}%`}
+          value={`${data.overview.conversionRate.toFixed(1)}%`}
           icon={<TrendingUp className="h-5 w-5" />}
-          change="+2.3%"
           loading={loading}
         />
       </div>
@@ -316,7 +355,9 @@ export default function AdminAnalyticsPage() {
                   Revenue Trend
                 </CardTitle>
                 <CardDescription>
-                  Monthly revenue and ticket sales
+                  {data.revenueTrend.length > 0
+                    ? `${data.revenueTrend.length} months of data`
+                    : "No revenue data available"}
                 </CardDescription>
               </div>
               <div className="flex gap-1">
@@ -335,55 +376,82 @@ export default function AdminAnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="h-80">
-              {/* Chart would go here - using a placeholder for now */}
-              <div className="flex items-center justify-center h-full border rounded-lg">
-                <div className="text-center">
-                  <BarChartIcon className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    Revenue chart visualization
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {chartType === "bar"
-                      ? "Bar chart"
-                      : chartType === "line"
-                      ? "Line chart"
-                      : "Area chart"}
-                    would display here
-                  </p>
-                </div>
-              </div>
+              {data.revenueTrend.length > 0 ? (
+                <>
+                  <div className="h-48 flex items-end justify-between gap-2 p-4 border rounded-lg">
+                    {data.revenueTrend.map((item, index) => {
+                      const maxRevenue = Math.max(
+                        ...data.revenueTrend.map((r) => r.revenue)
+                      );
+                      const height =
+                        maxRevenue > 0 ? (item.revenue / maxRevenue) * 100 : 0;
 
-              {/* Data summary */}
-              <div className="mt-4 grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Avg Monthly Revenue
-                  </p>
-                  <p className="text-lg font-semibold">
-                    {formatCurrency(
-                      (data?.revenueTrend.reduce(
-                        (sum, item) => sum + item.revenue,
-                        0
-                      ) || 0) / (data?.revenueTrend.length || 1)
-                    )}
-                  </p>
+                      return (
+                        <div
+                          key={index}
+                          className="flex flex-col items-center flex-1"
+                        >
+                          <div
+                            className="w-full bg-blue-500 rounded-t hover:bg-blue-600 transition-colors"
+                            style={{ height: `${height}%` }}
+                            title={`${item.month}: ${formatCurrency(
+                              item.revenue
+                            )}`}
+                          />
+                          <span className="text-xs mt-2">{item.month}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {formatNumber(item.tickets)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Data summary */}
+                  <div className="mt-4 grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Avg Monthly Revenue
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {formatCurrency(
+                          data.revenueTrend.reduce(
+                            (sum, item) => sum + item.revenue,
+                            0
+                          ) / data.revenueTrend.length
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-center p-3 bg-muted rounded-lg">
+                      <p className="text-sm text-muted-foreground">
+                        Avg Monthly Tickets
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {formatNumber(
+                          Math.round(
+                            data.revenueTrend.reduce(
+                              (sum, item) => sum + item.tickets,
+                              0
+                            ) / data.revenueTrend.length
+                          )
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-full border rounded-lg">
+                  <div className="text-center">
+                    <BarChartIcon className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      No revenue data available
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Add events with revenue data to see trends
+                    </p>
+                  </div>
                 </div>
-                <div className="text-center p-3 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">
-                    Avg Monthly Tickets
-                  </p>
-                  <p className="text-lg font-semibold">
-                    {formatNumber(
-                      Math.round(
-                        (data?.revenueTrend.reduce(
-                          (sum, item) => sum + item.tickets,
-                          0
-                        ) || 0) / (data?.revenueTrend.length || 1)
-                      )
-                    )}
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -395,53 +463,73 @@ export default function AdminAnalyticsPage() {
               <Activity className="h-5 w-5" />
               Top Performing Events
             </CardTitle>
-            <CardDescription>Events with highest ticket sales</CardDescription>
+            <CardDescription>
+              {data.topEvents.length} events with highest ticket sales
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {data?.topEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium">{event.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatNumber(event.ticketsSold)} tickets •{" "}
-                      {formatCurrency(event.revenue)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`px-2 py-1 text-xs rounded-full ${
-                        event.status === "active"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
+            {data.topEvents.length > 0 ? (
+              <>
+                <div className="space-y-4">
+                  {data.topEvents.map((event) => (
+                    <div
+                      key={event.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      {event.status}
-                    </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{event.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatNumber(event.ticketsSold)} tickets •{" "}
+                          {formatCurrency(event.revenue)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full whitespace-nowrap ${
+                            event.status === "active"
+                              ? "bg-green-100 text-green-800"
+                              : event.status === "completed"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {event.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 p-4 bg-muted rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Total Revenue (Top Events)</p>
+                      <p className="text-2xl font-bold">
+                        {formatCurrency(
+                          data.topEvents.reduce(
+                            (sum, event) => sum + event.revenue,
+                            0
+                          )
+                        )}
+                      </p>
+                    </div>
+                    <CalendarDays className="h-8 w-8 text-muted-foreground" />
                   </div>
                 </div>
-              ))}
-            </div>
-
-            <div className="mt-6 p-4 bg-muted rounded-lg">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium">Total Event Revenue</p>
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(
-                      data?.topEvents.reduce(
-                        (sum, event) => sum + event.revenue,
-                        0
-                      ) || 0
-                    )}
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-48 border rounded-lg">
+                <div className="text-center">
+                  <Activity className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    No event data available
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Create events to see performance metrics
                   </p>
                 </div>
-                <CalendarDays className="h-8 w-8 text-muted-foreground" />
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -453,41 +541,92 @@ export default function AdminAnalyticsPage() {
               User Growth & Activity
             </CardTitle>
             <CardDescription>
-              User acquisition and activity over time
+              {data.userGrowth.length > 0
+                ? `User acquisition over ${data.userGrowth.length} months`
+                : "User growth over time"}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-64">
-              {/* User growth chart placeholder */}
-              <div className="flex items-center justify-center h-full border rounded-lg">
-                <div className="text-center">
-                  <PieChart className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    User growth visualization
-                  </p>
+              {data.userGrowth.length > 0 ? (
+                <div className="h-full flex items-end justify-between gap-2 p-4 border rounded-lg">
+                  {data.userGrowth.map((item, index) => {
+                    const maxUsers = Math.max(
+                      ...data.userGrowth.map((u) => u.users)
+                    );
+                    const height =
+                      maxUsers > 0 ? (item.users / maxUsers) * 100 : 0;
+
+                    return (
+                      <div
+                        key={index}
+                        className="flex flex-col items-center flex-1"
+                      >
+                        <div className="relative w-full">
+                          <div
+                            className="w-full bg-green-500 rounded-t hover:bg-green-600 transition-colors"
+                            style={{ height: `${height}%` }}
+                            title={`${item.month}: ${item.users} users (${item.active} active)`}
+                          />
+                          {item.active > 0 && (
+                            <div
+                              className="w-full bg-green-300 rounded-t absolute bottom-0"
+                              style={{
+                                height: `${
+                                  maxUsers > 0
+                                    ? (item.active / maxUsers) * 100
+                                    : 0
+                                }%`,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span className="text-xs mt-2">{item.month}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.users}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-center h-full border rounded-lg">
+                  <div className="text-center">
+                    <PieChart className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      No user growth data available
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      User data will appear as users register
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* User metrics */}
             <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 border rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  New Users (Last 30 days)
-                </p>
+                <p className="text-sm text-muted-foreground">Active Users</p>
                 <p className="text-2xl font-bold">
-                  {data ? data.overview.totalUsers - 1400 : 0}
+                  {data.overview.activeUsers}
                 </p>
-              </div>
-              <div className="p-4 border rounded-lg">
-                <p className="text-sm text-muted-foreground">Active Rate</p>
-                <p className="text-2xl font-bold">
-                  {data
+                <p className="text-xs text-muted-foreground mt-1">
+                  {data.overview.totalUsers > 0
                     ? `${(
                         (data.overview.activeUsers / data.overview.totalUsers) *
                         100
-                      ).toFixed(1)}%`
-                    : "0%"}
+                      ).toFixed(1)}% of total`
+                    : "No users"}
+                </p>
+              </div>
+              <div className="p-4 border rounded-lg">
+                <p className="text-sm text-muted-foreground">Conversion Rate</p>
+                <p className="text-2xl font-bold">
+                  {data.overview.conversionRate.toFixed(1)}%
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tickets per user ratio
                 </p>
               </div>
               <div className="p-4 border rounded-lg">
@@ -495,11 +634,14 @@ export default function AdminAnalyticsPage() {
                   Avg Tickets per User
                 </p>
                 <p className="text-2xl font-bold">
-                  {data
+                  {data.overview.totalUsers > 0
                     ? (
                         data.overview.ticketsSold / data.overview.totalUsers
                       ).toFixed(1)
-                    : "0"}
+                    : "0.0"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Across all events
                 </p>
               </div>
             </div>
@@ -508,29 +650,50 @@ export default function AdminAnalyticsPage() {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <QuickStatCard
-          title="Best Selling Event"
-          value="Summer Music Festival"
-          description={`${formatNumber(4500)} tickets sold`}
-        />
-        <QuickStatCard
-          title="Highest Revenue Day"
-          value="May 15, 2024"
-          description={formatCurrency(85000)}
-        />
-        <QuickStatCard
-          title="Avg Ticket Price"
-          value={formatCurrency(
-            data ? data.overview.totalRevenue / data.overview.ticketsSold : 0
-          )}
-          description="Across all events"
-        />
-        <QuickStatCard
-          title="Peak Sales Time"
-          value="7:00 PM - 9:00 PM"
-          description="Most tickets sold during this period"
-        />
+      {data.topEvents.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <QuickStatCard
+            title="Best Selling Event"
+            value={data.topEvents[0]?.name || "N/A"}
+            description={`${formatNumber(
+              data.topEvents[0]?.ticketsSold || 0
+            )} tickets sold`}
+          />
+          <QuickStatCard
+            title="Total Monthly Revenue"
+            value={formatCurrency(
+              data.revenueTrend.reduce((sum, item) => sum + item.revenue, 0)
+            )}
+            description="Across all events"
+          />
+          <QuickStatCard
+            title="Avg Ticket Price"
+            value={formatCurrency(
+              data.overview.totalRevenue / data.overview.ticketsSold
+            )}
+            description="Average across all tickets"
+          />
+          <QuickStatCard
+            title="User Activity Rate"
+            value={`${
+              data.overview.totalUsers > 0
+                ? (
+                    (data.overview.activeUsers / data.overview.totalUsers) *
+                    100
+                  ).toFixed(1)
+                : "0.0"
+            }%`}
+            description="Active vs total users"
+          />
+        </div>
+      )}
+
+      {/* Data freshness indicator */}
+      <div className="text-center text-sm text-muted-foreground pt-4 border-t">
+        <p>
+          Data loaded from backend API • DynamoDB tables: Events & Users • Last
+          updated: {new Date().toLocaleTimeString()}
+        </p>
       </div>
     </div>
   );
@@ -541,17 +704,13 @@ function StatCard({
   title,
   value,
   icon,
-  change,
   loading = false,
 }: {
   title: string;
   value: string;
   icon: React.ReactNode;
-  change?: string;
   loading?: boolean;
 }) {
-  const isPositive = change?.startsWith("+");
-
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -564,19 +723,7 @@ function StatCard({
         {loading ? (
           <div className="h-8 bg-muted animate-pulse rounded"></div>
         ) : (
-          <>
-            <div className="text-2xl font-bold">{value}</div>
-            {change && (
-              <p
-                className={`text-sm flex items-center gap-1 mt-1 ${
-                  isPositive ? "text-green-600" : "text-red-600"
-                }`}
-              >
-                {isPositive ? "↗" : "↘"} {change}
-                <span className="text-muted-foreground">from last period</span>
-              </p>
-            )}
-          </>
+          <div className="text-2xl font-bold">{value}</div>
         )}
       </CardContent>
     </Card>
@@ -597,8 +744,15 @@ function QuickStatCard({
     <Card>
       <CardContent className="p-4">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
-        <p className="text-lg font-bold mt-1">{value}</p>
-        <p className="text-sm text-muted-foreground mt-1">{description}</p>
+        <p className="text-lg font-bold mt-1 truncate" title={value}>
+          {value}
+        </p>
+        <p
+          className="text-sm text-muted-foreground mt-1 truncate"
+          title={description}
+        >
+          {description}
+        </p>
       </CardContent>
     </Card>
   );
