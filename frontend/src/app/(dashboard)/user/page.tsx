@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+// Define interfaces based on ACTUAL backend responses
 interface UserEvent {
   id: string;
   title: string;
@@ -34,44 +35,110 @@ interface UserEvent {
   date: string;
   time: string;
   location: string;
+  city: string;
   category: string;
-  price: number;
   ticketsSold: number;
-  capacity: number;
-  status: "active" | "pending" | "completed" | "cancelled";
+  totalTickets: number;
+  revenue: number;
+  status: "active" | "upcoming" | "completed" | "draft" | "cancelled";
+  role: "organizer" | "attendee";
+  registrationDate?: string;
+  ticketCount?: number;
+  ticketNumbers?: string[];
+  isSaved?: boolean;
   imageUrl?: string;
+  organizer?: string;
 }
 
 interface UserTicket {
   id: string;
+  ticketId: string;
+  ticketNumber: string;
   eventId: string;
   eventName: string;
-  ticketNumber: string;
+  userId: string;
   purchaseDate: string;
   quantity: number;
+  unitPrice: number;
   totalAmount: number;
   status: "confirmed" | "pending" | "cancelled" | "checked_in";
-  checkInTime?: string;
-  unitPrice?: number;
-  transactionId?: string;
   paymentMethod?: string;
   paymentStatus?: string;
+  transactionId?: string;
+  checkInTime?: string;
+  checkInBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  eventDate?: string;
+  location?: string;
+  city?: string;
 }
 
 interface UserStats {
   totalTickets: number;
-  upcomingEvents: number;
+  ticketsPurchased: number;
+  organizedEvents: number;
+  attendingEvents: number;
+  upcomingOrganized: number;
+  pastOrganized: number;
+  upcomingAttending: number;
+  pastAttending: number;
+  organizedTicketsSold: number;
+  organizedRevenue: number;
   totalSpent: number;
-  favoriteCategory: string;
-  checkedInTickets: number;
+  averageTicketPrice: number;
+  organizedCompletionRate: number;
+  attendanceRate: number;
+}
+
+// Response interfaces with error handling
+interface UserTicketsResponse {
+  success: boolean;
+  data: UserTicket[];
+  tickets: UserTicket[];
+  count: number;
+  userId: string;
+  timestamp: string;
+  error?: string;
+  message?: string;
+}
+
+interface UserEventsResponse {
+  success: boolean;
+  events: UserEvent[];
+  counts: {
+    attending: number;
+    organizing: number;
+    past: number;
+    saved: number;
+  };
+  user: {
+    id: string;
+  };
+  error?: string;
+  message?: string;
+}
+
+interface UserStatsResponse {
+  success: boolean;
+  stats: UserStats;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  summary: {
+    message: string;
+    activeTickets: number;
+  };
+  error?: string;
+  message?: string;
 }
 
 export default function UserDashboardPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [loadingTickets, setLoadingTickets] = useState(true);
-  const [loadingEvents, setLoadingEvents] = useState(true);
   const [userEvents, setUserEvents] = useState<UserEvent[]>([]);
   const [userTickets, setUserTickets] = useState<UserTicket[]>([]);
   const [userStats, setUserStats] = useState<UserStats | null>(null);
@@ -79,19 +146,13 @@ export default function UserDashboardPage() {
 
   // Determine which user ID to use
   useEffect(() => {
-    // For development, use test-user-001
-    // In production, replace with actual user ID from auth
     const currentUserId = user?.id || "test-user-001";
     setUserId(currentUserId);
   }, [user]);
 
   // Fetch user tickets from backend
-  const fetchUserTickets = async () => {
-    if (!userId) return;
-
+  const fetchUserTickets = async (): Promise<UserTicket[]> => {
     try {
-      setLoadingTickets(true);
-
       const response = await fetch(
         `http://localhost:3001/user/tickets?userId=${userId}`,
         {
@@ -101,100 +162,121 @@ export default function UserDashboardPage() {
         }
       );
 
-      const result = await response.json();
+      // Check if response is not OK
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: UserTicketsResponse = await response.json();
 
       if (result.success) {
-        setUserTickets(result.data);
-        console.log("✅ Fetched tickets:", result.data.length, "tickets");
+        // Use either data or tickets array (they're duplicates)
+        const tickets = result.data || result.tickets || [];
+        setUserTickets(tickets);
+        return tickets;
       } else {
-        console.error("Failed to fetch tickets:", result.error);
-        toast({
-          title: "Error",
-          description: "Failed to load your tickets",
-          variant: "destructive",
-        });
-        setUserTickets([]);
+        // Handle case where success is false
+        const errorMessage =
+          result.error || result.message || "Failed to fetch tickets";
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("Error fetching user tickets:", error);
       toast({
-        title: "Network Error",
-        description: "Could not connect to backend",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to load your tickets",
         variant: "destructive",
       });
       setUserTickets([]);
-    } finally {
-      setLoadingTickets(false);
+      return [];
     }
   };
 
   // Fetch user events from backend
-  const fetchUserEvents = async () => {
+  const fetchUserEvents = async (): Promise<UserEvent[]> => {
     try {
-      setLoadingEvents(true);
+      const response = await fetch(
+        `http://localhost:3001/user/events?userId=${userId}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-      const response = await fetch(`http://localhost:3001/events`, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      // Check if response is not OK
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      const result = await response.json();
+      const result: UserEventsResponse = await response.json();
 
       if (result.success) {
-        const allEvents = result.events || result.data || [];
-
-        // Get event IDs from user's tickets
-        const userEventIds = [
-          ...new Set(userTickets.map((ticket) => ticket.eventId)),
-        ];
-
-        // Filter events to only show events user has tickets for
-        const userEvents = allEvents.filter((event: UserEvent) =>
-          userEventIds.includes(event.id)
-        );
-
-        setUserEvents(userEvents.slice(0, 10)); // Show up to 10 events
-        console.log(" Fetched user events:", userEvents.length, "events");
+        setUserEvents(result.events || []);
+        return result.events || [];
       } else {
-        console.error("Failed to fetch events:", result.error);
-        setUserEvents([]);
+        // Handle case where success is false
+        const errorMessage =
+          result.error || result.message || "Failed to fetch events";
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.error("Error fetching events:", error);
+      console.error("Error fetching user events:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to load your events",
+        variant: "destructive",
+      });
       setUserEvents([]);
-    } finally {
-      setLoadingEvents(false);
+      return [];
     }
   };
 
-  // Calculate user statistics from real data
-  const calculateUserStats = () => {
-    if (userTickets.length === 0 && userEvents.length === 0) {
+  // Fetch user statistics from backend
+  const fetchUserStats = async (): Promise<UserStats | null> => {
+    try {
+      const response = await fetch(
+        `http://localhost:3001/user/stats?userId=${userId}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      // Check if response is not OK
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result: UserStatsResponse = await response.json();
+
+      if (result.success) {
+        setUserStats(result.stats);
+        return result.stats;
+      } else {
+        // Handle case where success is false
+        const errorMessage =
+          result.error || result.message || "Failed to fetch stats";
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error("Error fetching user stats:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to load your statistics",
+        variant: "destructive",
+      });
       setUserStats(null);
-      return;
+      return null;
     }
-
-    const stats: UserStats = {
-      totalTickets: userTickets.reduce(
-        (sum, ticket) => sum + ticket.quantity,
-        0
-      ),
-      upcomingEvents: userEvents.filter(
-        (event) =>
-          new Date(event.date) > new Date() && event.status === "active"
-      ).length,
-      totalSpent: userTickets.reduce(
-        (sum, ticket) => sum + ticket.totalAmount,
-        0
-      ),
-      favoriteCategory: getMostFrequentCategory(userEvents),
-      checkedInTickets: userTickets.filter(
-        (ticket) => ticket.status === "checked_in"
-      ).length,
-    };
-
-    setUserStats(stats);
   };
 
   // Fetch all user data
@@ -202,21 +284,51 @@ export default function UserDashboardPage() {
     try {
       setLoading(true);
 
-      // Fetch tickets first
-      await fetchUserTickets();
+      // Fetch all data in parallel
+      const [tickets, events, stats] = await Promise.all([
+        fetchUserTickets(),
+        fetchUserEvents(),
+        fetchUserStats(),
+      ]);
 
-      // Then fetch events (depends on tickets data)
-      await fetchUserEvents();
-
-      // Calculate stats after both are fetched
-      calculateUserStats();
+      // If stats weren't fetched, calculate basic stats from tickets and events
+      if (!stats) {
+        const calculatedStats: UserStats = {
+          totalTickets: tickets.length,
+          ticketsPurchased: tickets.reduce(
+            (sum, ticket) => sum + ticket.quantity,
+            0
+          ),
+          organizedEvents: 0, // This user is not an organizer
+          attendingEvents: events.filter((e) => e.role === "attendee").length,
+          upcomingOrganized: 0,
+          pastOrganized: 0,
+          upcomingAttending: events.filter(
+            (e) =>
+              e.role === "attendee" &&
+              (e.status === "upcoming" || e.status === "active")
+          ).length,
+          pastAttending: events.filter(
+            (e) => e.role === "attendee" && e.status === "completed"
+          ).length,
+          organizedTicketsSold: 0,
+          organizedRevenue: 0,
+          totalSpent: tickets.reduce(
+            (sum, ticket) => sum + ticket.totalAmount,
+            0
+          ),
+          averageTicketPrice:
+            tickets.length > 0
+              ? tickets.reduce((sum, ticket) => sum + ticket.unitPrice, 0) /
+                tickets.length
+              : 0,
+          organizedCompletionRate: 0,
+          attendanceRate: 0,
+        };
+        setUserStats(calculatedStats);
+      }
     } catch (error) {
       console.error("Error fetching user data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }
@@ -281,6 +393,8 @@ export default function UserDashboardPage() {
         return "text-blue-600 bg-blue-100";
       case "checked_in":
         return "text-purple-600 bg-purple-100";
+      case "upcoming":
+        return "text-orange-600 bg-orange-100";
       default:
         return "text-gray-600 bg-gray-100";
     }
@@ -295,15 +409,12 @@ export default function UserDashboardPage() {
         return <XCircle className="h-4 w-4" />;
       case "checked_in":
         return <CheckCircle className="h-4 w-4" />;
+      case "upcoming":
+        return <Calendar className="h-4 w-4" />;
       default:
         return <Clock className="h-4 w-4" />;
     }
   };
-
-  // Get confirmed tickets
-  const confirmedTickets = userTickets.filter(
-    (t) => t.status === "confirmed" || t.status === "checked_in"
-  );
 
   if (authLoading) {
     return (
@@ -331,7 +442,24 @@ export default function UserDashboardPage() {
     );
   }
 
-  const totalLoading = loading || loadingTickets || loadingEvents;
+  // Calculate derived values for display
+  const totalTicketsQuantity = userTickets.reduce(
+    (sum, ticket) => sum + ticket.quantity,
+    0
+  );
+  const totalSpent = userTickets.reduce(
+    (sum, ticket) => sum + ticket.totalAmount,
+    0
+  );
+  const checkedInTickets = userTickets.filter(
+    (ticket) => ticket.status === "checked_in"
+  ).length;
+  const favoriteCategory = getMostFrequentCategory(userEvents);
+  const upcomingEventsCount = userEvents.filter(
+    (event) =>
+      event.role === "attendee" &&
+      (event.status === "upcoming" || event.status === "active")
+  ).length;
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -352,10 +480,10 @@ export default function UserDashboardPage() {
           variant="outline"
           size="sm"
           onClick={fetchUserData}
-          disabled={totalLoading}
+          disabled={loading}
         >
           <RefreshCw
-            className={`h-4 w-4 mr-2 ${totalLoading ? "animate-spin" : ""}`}
+            className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
           />
           Refresh
         </Button>
@@ -372,7 +500,7 @@ export default function UserDashboardPage() {
               <Ticket className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userStats.totalTickets}</div>
+              <div className="text-2xl font-bold">{totalTicketsQuantity}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {userTickets.length} purchases
               </p>
@@ -386,7 +514,7 @@ export default function UserDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(userStats.totalSpent)}
+                {formatCurrency(totalSpent)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Across all tickets
@@ -400,9 +528,7 @@ export default function UserDashboardPage() {
               <CheckCircle className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {userStats.checkedInTickets}
-              </div>
+              <div className="text-2xl font-bold">{checkedInTickets}</div>
               <p className="text-xs text-muted-foreground mt-1">Tickets used</p>
             </CardContent>
           </Card>
@@ -416,7 +542,7 @@ export default function UserDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold capitalize">
-                {userStats.favoriteCategory.toLowerCase()}
+                {favoriteCategory.toLowerCase()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Most attended
@@ -424,7 +550,7 @@ export default function UserDashboardPage() {
             </CardContent>
           </Card>
         </div>
-      ) : totalLoading ? (
+      ) : loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
@@ -464,14 +590,14 @@ export default function UserDashboardPage() {
               </div>
               <div>
                 <CardTitle>Your Tickets</CardTitle>
-                {loadingTickets ? (
+                {loading ? (
                   <div className="text-sm text-muted-foreground">
                     <span className="inline-block h-4 w-32 bg-muted animate-pulse rounded"></span>
                   </div>
                 ) : (
                   <CardDescription>
-                    {userTickets.length} purchases • {confirmedTickets.length}{" "}
-                    confirmed
+                    {userTickets.length} purchases • {checkedInTickets} checked
+                    in
                   </CardDescription>
                 )}
               </div>
@@ -491,22 +617,21 @@ export default function UserDashboardPage() {
                 <Calendar className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <CardTitle>Browse Events</CardTitle>
-                {loadingEvents ? (
+                <CardTitle>Your Events</CardTitle>
+                {loading ? (
                   <div className="text-sm text-muted-foreground">
                     <span className="inline-block h-4 w-32 bg-muted animate-pulse rounded"></span>
                   </div>
                 ) : (
                   <CardDescription>
-                    {userEvents.length} your events •{" "}
-                    {userStats?.upcomingEvents || 0} upcoming
+                    {userEvents.length} events • {upcomingEventsCount} upcoming
                   </CardDescription>
                 )}
               </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm">
-                Discover and book tickets for exciting events
+                View events you're attending or organizing
               </p>
             </CardContent>
           </Card>
@@ -534,18 +659,18 @@ export default function UserDashboardPage() {
         </Link>
       </div>
 
-      {/* Your Events with Tickets */}
+      {/* Your Events */}
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold">Your Events</h2>
-          <Link href="/events">
+          <Link href="/user/events">
             <Button variant="ghost" size="sm">
-              Browse All Events
+              View All Events
             </Button>
           </Link>
         </div>
 
-        {loadingEvents ? (
+        {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
               <Card key={i} className="overflow-hidden">
@@ -601,7 +726,7 @@ export default function UserDashboardPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4 mr-2" />
-                        {formatDate(event.date)}
+                        {event.date}
                       </div>
                       <div className="text-sm font-medium">
                         {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
@@ -614,8 +739,8 @@ export default function UserDashboardPage() {
                       </div>
                     )}
                     <div className="flex items-center text-sm text-muted-foreground">
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      {formatCurrency(event.price || 0)}
+                      <Users className="h-4 w-4 mr-2" />
+                      {event.ticketsSold} sold • {event.totalTickets} total
                     </div>
                     <div className="pt-2">
                       <Link href={`/events/${event.id}`} className="w-full">
@@ -633,11 +758,9 @@ export default function UserDashboardPage() {
               <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">No Events Found</h3>
               <p className="text-muted-foreground mb-4">
-                {userTickets.length > 0
-                  ? "We couldn't find event details for your tickets"
-                  : "You haven't purchased tickets for any events yet"}
+                You haven't purchased tickets for any events yet
               </p>
-              <Link href="/user/events">
+              <Link href="/events">
                 <Button>Browse Events</Button>
               </Link>
             </CardContent>
@@ -656,7 +779,7 @@ export default function UserDashboardPage() {
           </Link>
         </div>
 
-        {loadingTickets ? (
+        {loading ? (
           <Card>
             <CardContent className="p-0">
               <div className="p-4 space-y-4">
@@ -700,7 +823,7 @@ export default function UserDashboardPage() {
                         <td className="p-4">
                           <div className="font-medium">{ticket.eventName}</div>
                           <div className="text-sm text-muted-foreground">
-                            Qty: {ticket.quantity}
+                            Qty: {ticket.quantity} • {ticket.city}
                           </div>
                         </td>
                         <td className="p-4">
@@ -739,7 +862,7 @@ export default function UserDashboardPage() {
               <p className="text-muted-foreground mb-4">
                 Purchase tickets to events to see them here
               </p>
-              <Link href="/user/events">
+              <Link href="/events">
                 <Button>Browse Events</Button>
               </Link>
             </CardContent>
@@ -751,13 +874,9 @@ export default function UserDashboardPage() {
       <div className="text-center text-sm text-muted-foreground pt-4 border-t">
         <p>
           Dashboard data loaded from backend API •
-          {loadingTickets
-            ? " Loading tickets..."
-            : ` Tickets: ${userTickets.length}`}{" "}
-          •
-          {loadingEvents
-            ? " Loading events..."
-            : ` Events: ${userEvents.length}`}{" "}
+          {loading
+            ? " Loading..."
+            : ` Tickets: ${userTickets.length} • Events: ${userEvents.length}`}{" "}
           • Last updated: {new Date().toLocaleTimeString()}
         </p>
         <p className="text-xs mt-1">

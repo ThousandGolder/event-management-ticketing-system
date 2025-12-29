@@ -18,11 +18,13 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "attendee";
+  role: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  token: string | null; // Add token to context
+  setUser?: (user: User) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
@@ -33,18 +35,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null); // Add token state
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  // Load user from localStorage
+  // Load user AND token from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    if (!storedUser) return;
+    const storedToken = localStorage.getItem("token");
 
-    try {
-      setUser(JSON.parse(storedUser));
-    } catch {
-      localStorage.removeItem("user");
+    if (storedUser && storedToken) {
+      try {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+      } catch {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      }
     }
   }, []);
 
@@ -65,19 +72,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Map backend response
       const loggedInUser: User = {
-        id: data.userId,
-        name: data.name,
-        email: data.email,
-        role: data.userType, // admin | attendee
+        id: data.user.userId,
+        name: data.user.username || data.user.name || email.split("@")[0],
+        email: data.user.email,
+        role: data.user.userType,
       };
 
+      // Store BOTH user and token
       setUser(loggedInUser);
+      setToken(data.token);
       localStorage.setItem("user", JSON.stringify(loggedInUser));
+      localStorage.setItem("token", data.token); // CRITICAL: Store token
 
       toastSuccess("Login successful", `Welcome ${loggedInUser.name}`);
 
-      // ✅ CORRECT ROUTES
+      // Role-based redirect
       router.push(loggedInUser.role === "admin" ? "/admin" : "/user");
     } catch (err) {
       console.error(err);
@@ -89,7 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    setToken(null);
     localStorage.removeItem("user");
+    localStorage.removeItem("token"); // Remove token too
 
     toastInfo("Logged out", "See you again!");
     router.push("/login");
@@ -99,9 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        token, // Expose token
+        setUser,
         login,
         logout,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!token, // Check both
         isLoading,
       }}
     >

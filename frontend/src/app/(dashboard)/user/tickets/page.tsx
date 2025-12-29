@@ -601,7 +601,7 @@ Generated on: ${new Date().toLocaleDateString()}
             <div
               key={ticket.id}
               className="relative group cursor-pointer"
-              onClick={() => router.push(`/user/tickets/${ticket.id}`)} // FIXED: Using ticket.id not eventId
+              onClick={() => router.push(`/user/tickets/${ticket.id}`)}
             >
               <Card className="overflow-hidden hover:shadow-lg transition-shadow hover:border-blue-300 border-2 border-transparent">
                 <CardHeader className="pb-4">

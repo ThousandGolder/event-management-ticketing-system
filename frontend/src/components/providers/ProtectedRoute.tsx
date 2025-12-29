@@ -29,11 +29,11 @@ export function ProtectedRoute({
       cookie: document.cookie,
     };
 
-    console.log("🛡️ ProtectedRoute debug:", debug);
+    console.log(" ProtectedRoute debug:", debug);
     setDebugInfo(JSON.stringify(debug, null, 2));
 
     if (!isLoading && !isAuthenticated) {
-      console.log("❌ Not authenticated, redirecting to login");
+      console.log(" Not authenticated, redirecting to login");
       setTimeout(() => {
         router.push("/login");
       }, 100);
@@ -46,15 +46,15 @@ export function ProtectedRoute({
       requiredRole === "admin" &&
       user.role !== "admin"
     ) {
-      console.log("⚠️ User not admin, redirecting to user dashboard");
+      console.log(" User not admin, redirecting to user dashboard");
       setTimeout(() => {
-        router.push("/dashboard/user");
+        router.push("/user");
       }, 100);
     }
   }, [isAuthenticated, isLoading, router, user, requiredRole]);
 
   if (isLoading) {
-    console.log("⏳ ProtectedRoute showing loader");
+    console.log(" ProtectedRoute showing loader");
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -81,7 +81,7 @@ export function ProtectedRoute({
   }
 
   if (requiredRole === "admin" && user?.role !== "admin") {
-    console.log("👮 ProtectedRoute: insufficient permissions");
+    console.log(" ProtectedRoute: insufficient permissions");
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -97,6 +97,6 @@ export function ProtectedRoute({
     );
   }
 
-  console.log("✅ ProtectedRoute: rendering protected content");
+
   return <>{children}</>;
 }

@@ -372,22 +372,6 @@ export default function AdminDashboardPage() {
         <TabsContent value="users" className="space-y-4">
           {/* Using the UserManagement component */}
           <UserManagement users={users} setUsers={handleUserUpdate} />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Statistics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <StatRow label="Total Users" value={stats.totalUsers} />
-              <StatRow label="Active Users" value={stats.activeUsers} />
-              <StatRow label="Active Events" value={stats.activeEvents} />
-              <StatRow label="Tickets Sold" value={stats.ticketsSold} />
-              <StatRow
-                label="Total Revenue"
-                value={`$${stats.totalRevenue.toLocaleString()}`}
-              />
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* ================= ANALYTICS TAB ================= */}

@@ -8,7 +8,7 @@ export const handler = async (
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> => {
   try {
-    console.log("📊 Analytics request received");
+    console.log(" Analytics request received");
 
     // Parse query parameters
     const queryParams = event.queryStringParameters || {};
@@ -50,7 +50,7 @@ export const handler = async (
     ]);
 
     console.log(
-      `📈 Events found: ${events.length}, Users found: ${users.length}`
+      ` Events found: ${events.length}, Users found: ${users.length}`
     );
 
     // Calculate ticket sales from events
@@ -89,7 +89,7 @@ export const handler = async (
       } as AnalyticsResponse),
     };
   } catch (error) {
-    console.error("❌ Analytics error:", error);
+    console.error(" Analytics error:", error);
     return {
       statusCode: 500,
       headers: {
